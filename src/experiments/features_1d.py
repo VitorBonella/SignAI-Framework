@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import List, Callable, Dict, Optional, Tuple, Union
+from typing import Any, List, Callable, Dict, Optional, Tuple, Union
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest
@@ -12,11 +12,10 @@ from sklearn.metrics import (
     f1_score, roc_auc_score, confusion_matrix
 )
 from sklearn.base import BaseEstimator
-
+from sklearn.model_selection import GridSearchCV
 from vibdata.deep.signal.transforms import Transform
-from vibdata.raw.base import RawVibrationDataset
+from vibdata.deep.DeepDataset import DeepDataset
 from .base import Experiment
-from src.utils.data_chace import DataCache
 from src.utils.metrics import calculate_metrics
 from src.utils.experiment_result import ExperimentResults, FoldResults
 
@@ -27,81 +26,58 @@ class Features1DExperiment(Experiment):
         self,
         name: str,
         description: str,
-        feature_functions: List[Callable[[np.ndarray], float]],
-        dataset: RawVibrationDataset = None,
-        data_fold_idxs: List[int] = None,
+        dataset: DeepDataset = None,
+        data_fold_idxs: List[int] | List[List[int]] = None,
+        feature_names: List[str] = None,
         n_inner_folds: int = 3,
-        feature_selector: Optional[int] = None,
-        output_dir: str = "processed_data",
+        feature_selector: Optional[Callable] = None,
+        output_dir: str = "results_1d_features",
         random_state: int = 42,
+        model_parameters_search_space: Optional[Dict[str, Any]] = None,
+        scaler: Optional[Callable] = StandardScaler,
         **kwargs
     ):
         super().__init__(name, description, dataset, **kwargs)
-        self.feature_functions = feature_functions
-        self.n_outer_folds = len(np.unique(data_fold_idxs))
         self.n_inner_folds = n_inner_folds
+        self.feature_names = feature_names
         self.feature_selector = feature_selector
         self.output_dir = Path(output_dir)
         self.random_state = random_state
-        self.feature_names = [f"feature_{func.__name__}" for func in feature_functions]
         self.data_fold_idxs = data_fold_idxs
         self.results = None
+        self.model_parameters_search_space = model_parameters_search_space
+        self.scaler = scaler if scaler is not None else StandardScaler
+
+        if isinstance(data_fold_idxs[0], list):
+            self.n_outer_folds = len(np.unique(data_fold_idxs[0]))
+        else:
+            self.n_outer_folds = len(np.unique(data_fold_idxs))
         
+
+        self.prepare_data()
+
         # Criar diretório se não existir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _extract_features(self, signal: np.ndarray) -> np.ndarray:
-        """Extrai features de um sinal 1D usando as funções fornecidas."""
-        return np.array([func(signal) for func in self.feature_functions])
-
-    def prepare_data(self) -> pd.DataFrame:
-        """
-        Prepara os dados para o experimento.
-        
-        Returns:
-            DataFrame contendo features, rótulos e informação de folds
-            
-        Raises:
-            ValueError: Se dataset não foi fornecido
-        """
-        if self.dataset is None:
-            raise ValueError("Dataset não foi fornecido para o experimento")
-        
-        # Gerar nome do arquivo
-        dataset_name = self.dataset.name()
-        filename = DataCache.get_processed_filename(
-            self.output_dir, dataset_name, self.name)
-        
-        # Verificar se dados já foram processados
-        if DataCache.csv_matches_features(filename, self.feature_names):
-            print(f"Carregando dados processados de {filename}")
-            return DataCache.load_features_csv(filename)
-        
-        print(f"Processando dados e salvando em {filename}")
-        
-        # Extrair features para todos os sinais
+    def prepare_data(self):
+        #prepara x e y
         features, labels = [], []
         for sample in self.dataset:
-            features.append(self._extract_features(sample['signal'][0]))
+            features.append(sample['signal'][0])
             labels.append(sample['metainfo']['label'])
         
         # Criar arrays numpy
-        X = np.array(features)
-        y = np.array(labels)
-        
-        # Salvar dados processados
-        DataCache.save_features_csv(filename, X, y, self.data_fold_idxs, self.feature_names)
-        
-        return DataCache.load_features_csv(filename)
+        self.X = np.array(features)
+        self.y = np.array(labels)
 
     def _create_pipeline(self) -> Pipeline:
         """Cria o pipeline de processamento com seleção de features opcional."""
         steps = [
-            ('scaler', StandardScaler())
+            ('scaler', self.scaler())
         ]
         
         if self.feature_selector is not None:
-            steps.append(('feature_selector', SelectKBest(k=self.feature_selector)))
+            steps.append(('feature_selector', self.feature_selector))
         
         if self.model is None:
             raise ValueError("Modelo não foi definido para o experimento")
@@ -133,62 +109,70 @@ class Features1DExperiment(Experiment):
             random_state=self.random_state
         )
         
-        best_score = -np.inf
-        best_pipeline = None
-        inner_results = []
+        pipeline = self._create_pipeline()
+
+        search = GridSearchCV(
+                pipeline,
+                self.model_parameters_search_space,
+                cv=inner_cv,
+                scoring='f1_macro',
+                n_jobs=-1,
+                verbose=1
+            )
         
-        for train_idx, val_idx in inner_cv.split(X_train, y_train):
-            X_tr, X_val = X_train[train_idx], X_train[val_idx]
-            y_tr, y_val = y_train[train_idx], y_train[val_idx]
-            
-            pipeline = self._create_pipeline()
-            pipeline.fit(X_tr, y_tr)
-            
-            # Obter predições
-            y_pred = pipeline.predict(X_val)
-            y_proba = None
-            if hasattr(pipeline.named_steps['model'], 'predict_proba'):
-                y_proba = pipeline.predict_proba(X_val)
-            
-            # Calcular métricas
-            fold_metrics = calculate_metrics(y_val, y_pred, y_proba)
-            fold_score = fold_metrics['f1']  # Usando F1 como métrica principal
-            
-            # Atualizar melhor modelo
-            if fold_score > best_score:
-                best_score = fold_score
-                best_pipeline = pipeline
-            
+        # Fit the search
+        search.fit(X_train, y_train)
+        
+        # Get best pipeline and results
+        best_pipeline = search.best_estimator_
+        cv_results = search.cv_results_
+
+        # Store inner fold results
+        inner_results = []
+        for i in range(self.n_inner_folds):
+            fold_metrics = {
+                'f1': cv_results[f'split{i}_test_score'][search.best_index_],
+            }
             inner_results.append(fold_metrics)
         
-        # Calcular métricas médias
+    
         avg_metrics = {
-            'mean_accuracy': np.mean([m['accuracy'] for m in inner_results]),
-            'std_accuracy': np.std([m['accuracy'] for m in inner_results]),
             'mean_f1': np.mean([m['f1'] for m in inner_results]),
             'std_f1': np.std([m['f1'] for m in inner_results]),
-            'inner_folds_details': inner_results
+            'inner_folds_details': inner_results,
+            'best_params': search.best_params_
         }
         
-        # Obter features selecionadas se aplicável
+        # Get selected features if applicable
         selected_features = None
         if 'feature_selector' in best_pipeline.named_steps:
             selector = best_pipeline.named_steps['feature_selector']
             selected_features = [
                 self.feature_names[i] for i in selector.get_support(indices=True)
             ]
-        return avg_metrics, best_pipeline, selected_features, X_val, y_val, y_pred, y_proba
+
+        return avg_metrics, best_pipeline, selected_features
     
-    def run(self) -> ExperimentResults:
+    def run_single_round(self, multi_round_i = None) -> ExperimentResults:
         """Executa o experimento e retorna objeto ExperimentResults."""
         if self.model is None:
             raise ValueError("Modelo não foi definido para o experimento")
-        
-        data = self.prepare_data()
-        X = data.drop(['target', 'fold'], axis=1).values
-        y = data['target'].values
-        folds = data['fold'].values
-        
+
+        if not isinstance(self.data_fold_idxs[0], list)  and multi_round_i is None:
+            raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas. Use run_multi_round() para executar todas as rodadas.")
+
+        X = self.X
+        y = self.y
+
+        if multi_round_i is None:
+            folds = self.data_fold_idxs
+        else:
+            if not isinstance(self.data_fold_idxs[0], list) and not isinstance(self.data_fold_idxs[0], np.ndarray):
+                raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas.")
+            if multi_round_i < 0 or multi_round_i >= len(self.data_fold_idxs):
+                raise ValueError(f"Índice i={multi_round_i} fora do intervalo para data_fold_idxs com {len(self.data_fold_idxs)} rodadas.")
+            folds = self.data_fold_idxs[multi_round_i]
+
         # Criar objeto para armazenar resultados
         results = ExperimentResults(
             experiment_name=self.name,
@@ -217,7 +201,7 @@ class Features1DExperiment(Experiment):
             y_train, y_test = y[train_mask], y[test_mask]
             
             # Validação cruzada interna
-            inner_metrics, best_pipeline, selected_features, X_val, y_val, y_pred_val, y_proba_val = self._run_inner_cv(X_train, y_train)
+            inner_metrics, best_pipeline, selected_features = self._run_inner_cv(X_train, y_train)
             
             # Treinar com todos os dados de treino
             best_pipeline.fit(X_train, y_train)
@@ -249,7 +233,7 @@ class Features1DExperiment(Experiment):
                 selected_features=selected_features,
                 feature_importances=feature_importances
             )
-            print("FOLD RESULT>",fold_result)
+            #print("FOLD RESULT>",fold_result)
             results.add_fold_result(fold_result)
             
             print(f"  Teste - Acurácia: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1']:.4f}")
@@ -261,6 +245,29 @@ class Features1DExperiment(Experiment):
         print(f"Acurácia Média: {results.overall_metrics['accuracy']:.4f} ± {results.overall_metrics['std_accuracy']:.4f}")
         print(f"F1-Score Médio: {results.overall_metrics['mean_f1']:.4f} ± {results.overall_metrics['std_f1']:.4f}")
 
+        if multi_round_i is not None:
+            results.experiment_name += f"_round{multi_round_i+1}"
+
         results.save_json(f"vibration_analysis_results_{results.experiment_name}_features_{results.feature_names}.json")
 
         return results
+    
+    def run_multi_round(self) -> List[ExperimentResults]:
+        is_valid_type = isinstance(self.data_fold_idxs[0], list) or isinstance(self.data_fold_idxs[0], np.ndarray)
+        if self.data_fold_idxs is None or not is_valid_type:
+            raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas.")
+        
+        all_results = []
+        for round_idx, fold_idxs in enumerate(self.data_fold_idxs):
+            print(f"\n### Rodada {round_idx + 1}/{len(self.data_fold_idxs)} ###")
+            all_results.append(self.run_single_round(multi_round_i=round_idx))
+        
+        return all_results
+    
+    def run(self) -> ExperimentResults:
+        """Executa o experimento e retorna objeto ExperimentResults se for uma única rodada. Se nao for, use run_multi_round()."""
+        if isinstance(self.data_fold_idxs[0], list) or isinstance(self.data_fold_idxs[0], np.ndarray):
+            return self.run_multi_round()
+        else:
+            return self.run_single_round()
+        

@@ -14,8 +14,6 @@ class Experiment(ABC):
         description: str,
         dataset: Optional[RawVibrationDataset] = None,
         data_transform: Optional[Transform] = None,
-        data_division_method: Optional[str] = None,
-        data_division_params: Optional[Dict[str, Any]] = None,
         feature_selector = None,
         model = None
     ):
@@ -36,8 +34,6 @@ class Experiment(ABC):
         self.description = description
         self.dataset = dataset
         self.data_transform = data_transform
-        self.data_division_method = data_division_method
-        self.data_division_params = data_division_params or {}
         self.feature_selector = feature_selector
         self.model = model
         
