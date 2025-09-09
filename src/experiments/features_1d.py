@@ -19,6 +19,9 @@ from .base import Experiment
 from src.utils.metrics import calculate_metrics
 from src.utils.experiment_result import ExperimentResults, FoldResults
 
+import time
+import os
+
 class Features1DExperiment(Experiment):
 
     
@@ -39,6 +42,10 @@ class Features1DExperiment(Experiment):
     ):
         super().__init__(name, description, dataset, **kwargs)
         self.n_inner_folds = n_inner_folds
+
+        if not isinstance(feature_names[0], str):
+            feature_names = [f.__class__.__name__ for f in feature_names]
+
         self.feature_names = feature_names
         self.feature_selector = feature_selector
         self.output_dir = Path(output_dir)
@@ -157,17 +164,14 @@ class Features1DExperiment(Experiment):
         """Executa o experimento e retorna objeto ExperimentResults."""
         if self.model is None:
             raise ValueError("Modelo não foi definido para o experimento")
-
-        if not isinstance(self.data_fold_idxs[0], list)  and multi_round_i is None:
-            raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas. Use run_multi_round() para executar todas as rodadas.")
-
+        
         X = self.X
         y = self.y
 
         if multi_round_i is None:
             folds = self.data_fold_idxs
         else:
-            if not isinstance(self.data_fold_idxs[0], list) and not isinstance(self.data_fold_idxs[0], np.ndarray):
+            if not isinstance(self.data_fold_idxs[0], np.ndarray):
                 raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas.")
             if multi_round_i < 0 or multi_round_i >= len(self.data_fold_idxs):
                 raise ValueError(f"Índice i={multi_round_i} fora do intervalo para data_fold_idxs com {len(self.data_fold_idxs)} rodadas.")
@@ -216,12 +220,12 @@ class Features1DExperiment(Experiment):
             test_metrics = calculate_metrics(y_test, y_pred, y_proba)
             
             # Armazenar importância das features se disponível
-            feature_importances = None
-            if hasattr(best_pipeline.named_steps['model'], 'feature_importances_'):
-                feature_importances = dict(zip(
-                    self.feature_names,
-                    best_pipeline.named_steps['model'].feature_importances_
-                ))
+            #feature_importances = None
+            #if hasattr(best_pipeline.named_steps['model'], 'feature_importances_'):
+            #    feature_importances = dict(zip(
+            #        self.feature_names,
+            #        best_pipeline.named_steps['model'].feature_importances_
+            #    ))
             
             # Criar resultado do fold
             fold_result = FoldResults(
@@ -231,7 +235,7 @@ class Features1DExperiment(Experiment):
                 y_proba=y_proba,
                 metrics=test_metrics,
                 selected_features=selected_features,
-                feature_importances=feature_importances
+                #feature_importances=feature_importances
             )
             #print("FOLD RESULT>",fold_result)
             results.add_fold_result(fold_result)
@@ -244,16 +248,22 @@ class Features1DExperiment(Experiment):
         print("\n=== Resultados Finais ===")
         print(f"Acurácia Média: {results.overall_metrics['accuracy']:.4f} ± {results.overall_metrics['std_accuracy']:.4f}")
         print(f"F1-Score Médio: {results.overall_metrics['mean_f1']:.4f} ± {results.overall_metrics['std_f1']:.4f}")
-
-        if multi_round_i is not None:
-            results.experiment_name += f"_round{multi_round_i+1}"
-
-        results.save_json(f"vibration_analysis_results_{results.experiment_name}_features_{results.feature_names}.json")
+        
+        if multi_round_i is None:
+            results.save_json(f"vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
+        else:
+            #create a directory if not exists
+            dir_path = f"{self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}"
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+                print(f"Changed working directory to: {dir_path}")
+            # Save results
+            results.save_json(f"{dir_path}/round{multi_round_i+1}.json")
 
         return results
     
     def run_multi_round(self) -> List[ExperimentResults]:
-        is_valid_type = isinstance(self.data_fold_idxs[0], list) or isinstance(self.data_fold_idxs[0], np.ndarray)
+        is_valid_type = isinstance(self.data_fold_idxs[0], np.ndarray)
         if self.data_fold_idxs is None or not is_valid_type:
             raise ValueError("data_fold_idxs deve ser uma lista de listas para múltiplas rodadas.")
         
@@ -266,7 +276,8 @@ class Features1DExperiment(Experiment):
     
     def run(self) -> ExperimentResults:
         """Executa o experimento e retorna objeto ExperimentResults se for uma única rodada. Se nao for, use run_multi_round()."""
-        if isinstance(self.data_fold_idxs[0], list) or isinstance(self.data_fold_idxs[0], np.ndarray):
+        self.start_time = time.strftime("%Y%m%d_%H%M%S")
+        if isinstance(self.data_fold_idxs[0], np.ndarray):
             return self.run_multi_round()
         else:
             return self.run_single_round()
