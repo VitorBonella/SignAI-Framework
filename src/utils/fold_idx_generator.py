@@ -7,7 +7,7 @@ from vibdata.deep.signal.core import SignalSample
 from src.utils.group_dataset import GroupDataset
 import numpy as np
 
-class FoldIdxGenerator:
+class FoldIdxGeneratorUnbiased:
     def __init__(self, dataset: DeepDataset,
                 custom_group_dataset: GroupDataset,
                 dataset_name: str = None,
@@ -26,15 +26,15 @@ class FoldIdxGenerator:
 
     def generate_folds(self):
         if self.multiround:
-            return self.generate_folds_multiround()
+            return self.generate_folds_unbiased_multiround()
         else:
-            return self.generate_folds_singleround()
+            return self.generate_folds_unbiased_singleround()
 
-    def generate_folds_singleround(self):    
+    def generate_folds_unbiased_singleround(self):    
         folds = self.custom_group_dataset(self.dataset, custom_name="CustomGroup"+self.dataset_name).groups()
         return folds
     
-    def generate_folds_multiround(self):
+    def generate_folds_unbiased_multiround(self):
         self.dataset_name = self.dataset_name + "_multiround"
         labels = []
         for sample in self.dataset:
@@ -159,3 +159,31 @@ class FoldIdxGenerator:
                     print(f"=> {len(folds)}")
                 folds.add(fold_repr)
             print()
+
+from sklearn.model_selection import StratifiedKFold
+
+class FoldIdxGeneratorBiased:
+    def __init__(self, dataset: DeepDataset,
+                dataset_name: str = None,
+                n_folds: int = 4,
+                random_state: int = 42) -> None:
+        self.dataset = dataset
+        self.random_state = random_state
+        self.dataset_name = dataset_name if dataset_name else "default_dataset"
+        self.n_folds = n_folds
+
+    def generate_folds(self):
+        # Extract labels from the dataset
+        labels = [item['metainfo']['label'] for item in self.dataset]
+        
+        # Initialize StratifiedKFold
+        skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.random_state)
+        
+        # Create array to store fold assignments
+        fold_assignments = np.zeros(len(self.dataset), dtype=int)
+        
+        # Generate fold assignments
+        for fold_idx, (_, test_idx) in enumerate(skf.split(range(len(self.dataset)), labels)):
+            fold_assignments[test_idx] = fold_idx
+
+        return fold_assignments
