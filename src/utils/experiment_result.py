@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass, asdict, field
 from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 @dataclass
 class FoldResults:
@@ -111,3 +113,118 @@ class ExperimentResults:
             overall_metrics=data['overall_metrics'],
             config=data['config']
         )
+    
+    def show_results(self, figsize: tuple = (10, 6), cmap: str = 'Blues'):
+        """
+        Exibe os resultados do experimento em formato de tabela e matriz de confusão.
+        
+        Args:
+            figsize: Tamanho da figura da matriz de confusão
+            cmap: Mapa de cores para a matriz de confusão
+        """
+        # Verificar se as métricas gerais foram calculadas
+        if not self.overall_metrics:
+            self.calculate_overall_metrics()
+        
+        print("=" * 70)
+        print(f"EXPERIMENTO: {self.experiment_name}")
+        print(f"DESCRIÇÃO: {self.description}")
+        print(f"MODELO: {self.model_name}")
+        print(f"QUANTIDADE DE FOLDS: {len(self.folds)}")
+        if self.feature_names:
+            print(f"QUANTIDADE DE FEATURES: {len(self.feature_names)}")
+        print("=" * 70)
+        
+        # Criar tabela de métricas gerais
+        metrics_data = {
+            'Métrica': [
+                'Acurácia Média',
+                'Desvio Padrão Acurácia', 
+                'F1-Score Médio',
+                'Desvio Padrão F1-Score'
+            ],
+            'Valor': [
+                f"{self.overall_metrics['accuracy']:.4f}",
+                f"±{self.overall_metrics['std_accuracy']:.4f}",
+                f"{self.overall_metrics['mean_f1']:.4f}",
+                f"±{self.overall_metrics['std_f1']:.4f}"
+            ]
+        }
+        
+        df_metrics = pd.DataFrame(metrics_data)
+        print("\nMÉTRICAS GERAIS DO EXPERIMENTO:")
+        print("-" * 50)
+        print(df_metrics.to_string(index=False))
+        
+        # Tabela detalhada por fold
+        if self.folds:
+            print(f"\nDETALHES POR FOLD:")
+            print("-" * 60)
+            fold_data = []
+            for i, fold in enumerate(self.folds):
+                fold_data.append({
+                    'Fold': i + 1,
+                    'Acurácia': f"{fold.metrics.get('accuracy', 0):.4f}",
+                    'F1-Score': f"{fold.metrics.get('f1', 0):.4f}",
+                    'Precision': f"{fold.metrics.get('precision', 0):.4f}",
+                    'Recall': f"{fold.metrics.get('recall', 0):.4f}"
+                })
+            
+            df_folds = pd.DataFrame(fold_data)
+            print(df_folds.to_string(index=False))
+        
+        # Plotar matriz de confusão
+        if 'confusion_matrix' in self.overall_metrics:
+            self._plot_confusion_matrix(
+                np.array(self.overall_metrics['confusion_matrix']),
+                figsize=figsize,
+                cmap=cmap
+            )
+    
+    def _plot_confusion_matrix(self, cm: np.ndarray, figsize: tuple = (10, 6), cmap: str = 'Blues'):
+        """
+        Plota a matriz de confusão.
+        
+        Args:
+            cm: Matriz de confusão
+            figsize: Tamanho da figura
+            cmap: Mapa de cores
+        """
+        plt.figure(figsize=figsize)
+        
+        # Calcular totais para anotações
+        cm_sum = np.sum(cm, axis=1, keepdims=True)
+        cm_percentage = cm / cm_sum.astype(float) * 100
+        
+        # Criar heatmap
+        ax = sns.heatmap(
+            cm, 
+            annot=True, 
+            fmt='d',
+            cmap=cmap,
+            cbar=True,
+            square=True,
+            linewidths=0.5,
+            linecolor='white'
+        )
+        
+        # Adicionar porcentagens
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                if cm[i, j] > 0:  # Só adiciona texto se o valor for maior que 0
+                    ax.text(j + 0.5, i + 0.3, f'{cm_percentage[i, j]:.1f}%', 
+                           ha='center', va='center', fontsize=10, color='red')
+        
+        plt.title(f'Confusion Matrix - {self.experiment_name}', fontsize=14, fontweight='bold')
+        plt.xlabel('Predicted', fontsize=12)
+        plt.ylabel('True', fontsize=12)
+        
+        # Ajustar layout
+        plt.tight_layout()
+        plt.show()
+        
+        # Estatísticas adicionais da matriz de confusão
+        accuracy = np.trace(cm) / np.sum(cm)
+        print(f"\nESTATÍSTICAS DA MATRIZ DE CONFUSÃO:")
+        print(f"Acurácia Geral: {accuracy:.4f}")
+        print(f"Total de Amostras: {np.sum(cm)}")
