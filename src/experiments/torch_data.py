@@ -30,7 +30,7 @@ class TorchVibrationDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
-class TorchExperiment(Experiment):
+class DeepLearningExperiment(Experiment):
     def __init__(
         self,
         name: str,
