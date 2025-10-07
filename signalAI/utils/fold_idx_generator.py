@@ -4,7 +4,7 @@ from tqdm import tqdm
 from vibdata.deep.DeepDataset import DeepDataset
 from vibdata.deep.signal.core import SignalSample
 
-from src.utils.group_dataset import GroupDataset
+from signalAI.utils.group_dataset import GroupDataset
 import numpy as np
 
 class FoldIdxGeneratorUnbiased:

@@ -13,8 +13,8 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import matplotlib.pyplot as plt
 
 from .base import Experiment
-from src.utils.metrics import calculate_metrics
-from src.utils.experiment_result import ExperimentResults, FoldResults
+from signalAI.utils.metrics import calculate_metrics
+from signalAI.utils.experiment_result import ExperimentResults, FoldResults
 import copy
 
 class TorchVibrationDataset(Dataset):

@@ -16,8 +16,8 @@ from sklearn.model_selection import GridSearchCV
 from vibdata.deep.signal.transforms import Transform
 from vibdata.deep.DeepDataset import DeepDataset
 from .base import Experiment
-from src.utils.metrics import calculate_metrics
-from src.utils.experiment_result import ExperimentResults, FoldResults
+from signalAI.utils.metrics import calculate_metrics
+from signalAI.utils.experiment_result import ExperimentResults, FoldResults
 
 import time
 import os
