@@ -62,7 +62,7 @@ class GroupDataset:
             npt.NDArray[np.int_]: groups of each sample in dataset, in the original order
         """
         # Create the indexes shuffled
-        rng = np.random.default_rng(self.config["seed"])  # Ensure thats the seed is correct
+        rng = np.random.default_rng(42)  # Ensure thats the seed is correct
         indexs_shuffled = np.arange(len(self.dataset))
         rng.shuffle(indexs_shuffled)
         # Map the dataset ramdomly

@@ -237,6 +237,7 @@ class DeepLearningExperiment(Experiment):
 
         results.calculate_overall_metrics()
         results.save_json(self.dir_path + f"torch_results_{self.start_time}.json")
+        print(f"Saved results to: {self.dir_path + f'torch_results_{self.start_time}.json'}")
 
         print("\n=== Final Results ===")
         print(f"Mean Accuracy: {results.overall_metrics['accuracy']:.4f} ± {results.overall_metrics['std_accuracy']:.4f}")

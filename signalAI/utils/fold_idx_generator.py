@@ -109,10 +109,11 @@ class FoldIdxGeneratorUnbiased:
                 if len(valid_combs) == n_repeats:
                     iterator.close()
                     break
-        
+
         if self.class_def and self.condition_def:
             self.print_combinations(valid_combs, categorical_groups=False)
-
+        if self.class_def:
+            self.print_combinations(valid_combs, categorical_groups=True)
 
         fold_map = {}
         folds_multiround = []

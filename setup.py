@@ -8,12 +8,19 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='signalAI',
-    version='0.0.3',
+    version='0.0.5',
     description='A package for vibration signal analysis using AI',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/VitorBonella/SignAI-Framework',
     author='Vitor Bonella',
     packages=find_packages(),
-    install_requires=[]
+    install_requires=["torch",
+                      "tqdm",
+                      "numpy",
+                      "pandas",
+                      "scikit-learn",
+                      "seaborn",
+                      "matplotlib"
+                      ]
 )
