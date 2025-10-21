@@ -106,12 +106,8 @@ def main(classifier_name, dataset_name, transform_name, transforms):
     print("Generating folds...")
     if "MFPT" in dataset_name:
         CLASS_DEF = {23: "N", 25: "O", 24: "I"}
+        CONDITION_DEF = {"0":"C1","25":"C2","50":"C3","100":"C4","150":"C5","200":"C6","250":"C7","300":"C8"}
         
-        class foo(dict):
-            def __getitem__(self, key):
-                return str(key)
-
-        CONDITION_DEF = foo()
         GroupClass = GroupMultiRoundMFPT
     else:
         CLASS_DEF = {0: "N", 1: "O", 2: "I", 3: "R"}

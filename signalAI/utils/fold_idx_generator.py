@@ -112,7 +112,7 @@ class FoldIdxGeneratorUnbiased:
 
         if self.class_def and self.condition_def:
             self.print_combinations(valid_combs, categorical_groups=False)
-        if self.class_def:
+        elif self.class_def:
             self.print_combinations(valid_combs, categorical_groups=True)
 
         fold_map = {}
