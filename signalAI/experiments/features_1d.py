@@ -250,8 +250,8 @@ class Features1DExperiment(Experiment):
         print(f"F1-Score Médio: {results.overall_metrics['mean_f1']:.4f} ± {results.overall_metrics['std_f1']:.4f}")
         
         if multi_round_i is None:
-            results.save_json(f"vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
-            print(f"Saved results to: vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
+            results.save_json(f"{self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
+            print(f"Saved results to: {self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
         else:
             #create a directory if not exists
             dir_path = f"{self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}"

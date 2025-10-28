@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix,
-    classification_report
+    classification_report, balanced_accuracy_score
 )
 
 def calculate_metrics(
@@ -26,10 +26,10 @@ def calculate_metrics(
         Dicionário com todas as métricas calculadas
     """
     metrics = {
-        'accuracy': accuracy_score(y_true, y_pred),
-        'precision': precision_score(y_true, y_pred, average='weighted'),
-        'recall': recall_score(y_true, y_pred, average='weighted'),
-        'f1': f1_score(y_true, y_pred, average='weighted'),
+        'accuracy': balanced_accuracy_score(y_true, y_pred),
+        'precision': precision_score(y_true, y_pred, average='macro'),
+        'recall': recall_score(y_true, y_pred, average='macro'),
+        'f1': f1_score(y_true, y_pred, average='macro'),
         'classification_report': classification_report(y_true, y_pred, output_dict=True)
     }
     

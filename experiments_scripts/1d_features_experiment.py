@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import pywt
 from sklearn.ensemble import RandomForestClassifier
 import vibdata.raw as raw_datasets
 from vibdata.deep.signal.transforms import (
@@ -16,37 +17,141 @@ from signalAI.utils.group_dataset import GroupDataset
 from signalAI.utils.fold_idx_generator import FoldIdxGeneratorUnbiased
 from signalAI.experiments.features_1d import Features1DExperiment
 
+import freq_features
+import wavelet_features
+from ims_resampler import ResamplerIMS
 
 # ======================================
 # Feature extraction setup
 # ======================================
-features_funcs = [
+features_funcs_time = [
     Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(), LogAttackTime(),
     TemporalDecrease(), TemporalCentroid(), EffectiveDuration(), ZeroCrossingRate(),
     PeakValue(), CrestFactor(), Skewness(), ClearanceFactor(), ImpulseFactor(),
     ShapeFactor(), UpperBoundValueHistogram(), LowerBoundValueHistogram(), Variance(), PeakToPeak()
 ]
 
+features_funcs_freq = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
+    CrestFactor(), Skewness(), Variance(), PeakValue(),
+    freq_features.SpectralRolloff(), freq_features.SpectralFlatness(),
+    freq_features.SpectralEntropy(), freq_features.SpectralCentroid(), freq_features.SpectralBandwidth(),
+    freq_features.DominantFrequency()
+]
+
+features_funcs_wavelet = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(), 
+    PeakValue(), CrestFactor(), Skewness(), ClearanceFactor(), ImpulseFactor(),
+    ShapeFactor(), Variance(), wavelet_features.Energy(),
+    wavelet_features.Entropy(),
+]
+
 transforms_time = Sequential([
     SplitSampleRate(),
-    FeatureExtractor(features=features_funcs),
+    FeatureExtractor(features=features_funcs_time),
 ])
 
 transforms_frequency = Sequential([
     SplitSampleRate(),
     FFT(),
-    FeatureExtractor(features=features_funcs),
+    FeatureExtractor(features=features_funcs_freq),
 ])
 
 transforms_time_frequency = Sequential([
     SplitSampleRate(),
     Aggregator([
-        FeatureExtractor(features=features_funcs),  # Time domain features
-        Sequential([FFT(), FeatureExtractor(features=features_funcs)])  # Frequency domain features
+        FeatureExtractor(features=features_funcs_time),  # Time domain features
+        Sequential([FFT(), FeatureExtractor(features=features_funcs_freq)])  # Frequency domain features
     ])
 ])
 
 
+class WaveletCoeffsFeatures(Transform):
+    def __init__(self, wavelet='db4', level=4, features = [Mean()]) -> None:
+        super().__init__()
+        self.level = level
+        self.wavelet = wavelet
+        self.features = features
+        self.wavelet_multilevel_feat = [wavelet_features.LevelCorrelationCoefficients(),wavelet_features.RelativeEnergyRatio()]
+
+    def transform(self, data):
+        data = data.copy()
+        metainfo = data["metainfo"].copy(deep=False)
+        signals = data["signal"]
+
+        ret = []
+        for (_, entry), sig in zip(metainfo.iterrows(), signals):
+            coeffs = pywt.wavedec(sig, self.wavelet, level=self.level)
+
+            new_data = []
+            for c in coeffs:
+                m_data = {}
+                m_data['signal'] = c
+                [new_data.append(f(m_data)) for f in self.features]
+
+            m_data = {}
+            m_data['signal'] = coeffs
+            [new_data.append(f(m_data)) for f in self.wavelet_multilevel_feat]
+            ret.append(new_data)
+
+
+        data["signal"] = ret
+        return data
+
+transform_wavelet = Sequential([
+    SplitSampleRate(),
+    WaveletCoeffsFeatures(features = features_funcs_wavelet)
+])
+
+import numpy as np
+from scipy.fft import rfft, rfftfreq
+from vibdata.deep.signal.transforms import Transform  # Assuming same base
+
+class PowerSpectralDensity(Transform):
+    def __init__(self):
+        super().__init__()
+
+    def transform(self, data):
+        data = data.copy()
+        metainfo = data["metainfo"].copy(deep=False)
+        signals = data["signal"]
+
+        psd_list = []
+
+        for (_, entry), sig in zip(metainfo.iterrows(), signals):
+            sig = np.asarray(sig)
+            sig_sample_rate = entry["sample_rate"]
+
+            # Compute FFT
+            fft_vals = rfft(sig, norm="forward")
+
+            # Low-pass filter (like your FFT class)
+            if "original_sample_rate" in entry:
+                freqs = rfftfreq(len(sig), d=1 / sig_sample_rate)
+                bandwidth = entry["original_sample_rate"] / 2
+                mask = freqs >= bandwidth
+                fft_vals[mask] = 0.0
+
+            # Compute Power Spectral Density
+            # PSD = (|FFT|^2) / N, normalized by sampling frequency
+            psd = (np.abs(fft_vals) ** 2) / len(sig)
+
+            psd_list.append(psd)
+
+        data["signal"] = psd_list
+        return data
+
+
+features_funcs_psd = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
+    CrestFactor(), Skewness(), Variance(), PeakValue()
+]
+
+transforms_psd = Sequential([
+    SplitSampleRate(),
+    PowerSpectralDensity(),
+    FeatureExtractor(features=features_funcs_psd),
+])
 # ======================================
 # Dataset grouping strategies
 # ======================================
@@ -63,8 +168,86 @@ class GroupMultiRoundCWRULoad(GroupDataset):
         sample_metainfo = sample["metainfo"]
         return sample_metainfo["label"].astype(str) + " " + sample_metainfo["load"].astype(int).astype(str)
 
+class GroupMultiRoundPU(GroupDataset):
+    @staticmethod
+    def _assigne_group(sample: SignalSample) -> int:
+        sample_metainfo = sample["metainfo"]
+        condition_fields = ["radial_force_n", "rotation_hz", "load_nm"]
+        condition_str = "_".join([sample_metainfo[field].astype(str) for field in condition_fields])
+        return sample_metainfo["label"].astype(str) + " " + condition_str
 
-# ======================================
+class GroupIMS(GroupDataset):
+    NUM_FOLDS = 3
+
+    def __init__(self, dataset, custom_name: str = None) -> None:
+        super().__init__(dataset, custom_name, shuffle=True)
+
+        keys = dataset.get_labels()
+        values = dataset.get_labels_name()
+
+        self.labels_name = dict(zip(keys, values))
+        # Compute how much of each class uniformed distributed should be assinged to each fold
+
+        name_to_label = dict(zip(values, keys))
+
+        metainfo = dataset.get_metainfo()
+        defects_frequency = metainfo[metainfo.label != name_to_label["Normal"]].label.value_counts()
+        # Create a dict with the amount of samples per fold
+        self.defects_bins = {
+            label: {"samples_per_fold": np.ceil(total / GroupIMS.NUM_FOLDS), "current_amount": 0}
+            for label, total in defects_frequency.items()
+        }
+
+    def _get_group_divided(self, label: int):
+        current_amount = self.defects_bins[label]["current_amount"]
+        samples_per_fold = self.defects_bins[label]["samples_per_fold"]
+
+        group = (current_amount // samples_per_fold) + 1
+        self.defects_bins[label]["current_amount"] += 1
+        return group
+
+    def _assigne_group(self, sample: SignalSample) -> int:
+        bearing = sample["metainfo"]["bearing"]
+        test = sample["metainfo"]["test"]
+        label = sample["metainfo"]["label"]
+        label_str = self.labels_name[label]
+
+        if test == 1 and bearing == 3:
+            return 0 if label_str == "Normal" else self._get_group_divided(label)
+        elif test == 1 and bearing == 4:
+            return 1 if label_str == "Normal" else self._get_group_divided(label)
+        elif test == 2 and bearing == 1:
+            return 2 if label_str == "Normal" else self._get_group_divided(label)
+        else:
+            raise Exception(
+                "Unexpected sample. The sample received is one of the conditions left out.\n"
+                "The sample is of test: " + str(test) + " and bearing: " + str(bearing)
+            )
+
+class GroupUOC(GroupDataset):
+    NUM_FOLDS = 5
+
+    def __init__(self, dataset, custom_name: str = None) -> None:
+        super().__init__(dataset, custom_name, shuffle=True)
+
+        keys = dataset.get_labels()
+        values = dataset.get_labels_name()
+
+        self.labels_name = dict(zip(keys, values))
+
+        self.labels_bins = {label: {fold: 0 for fold in range(1, GroupUOC.NUM_FOLDS + 1)} for label in keys}
+
+    def _assigne_group(self, sample: SignalSample) -> int:
+        severity = sample["metainfo"]["severity"]
+        if severity != "-":
+            return int(severity)
+        else:
+            label = sample["metainfo"]["label"]
+            group = min(self.labels_bins[label], key=self.labels_bins[label].get)
+            self.labels_bins[label][group] += 1
+            return group
+
+# ====================================== 
 # Main experiment runner
 # ======================================
 def main(classifier_name, dataset_name, transform_name, transforms):
@@ -76,8 +259,8 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 
     # ---- Dataset setup ----
     dataset_key = dataset_name.split("_")[0]
-    raw_root_dir = f"../data/raw_data/{dataset_key}_{transform_name}"
-    deep_root_dir = f"../data/deep_data/{dataset_key}_{transform_name}"
+    raw_root_dir = f"../data/raw_data/{dataset_key}"
+    deep_root_dir = f"../data/deep_data/{dataset_name}_{transform_name}"
 
     raw_dataset_fn = getattr(raw_datasets, dataset_key + "_raw")
     raw_dataset = raw_dataset_fn(raw_root_dir, download=True)
@@ -85,9 +268,9 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 
     # ---- Filtering ----
     if "CWRU" in dataset_name:
-        if "48k" in dataset_name:
+        if "48K" in dataset_name:
             filter = FilterByValue(on_field="sample_rate", values=48000)
-        elif "12k" in dataset_name:
+        elif "12K" in dataset_name:
             filter = FilterByValue(on_field="sample_rate", values=12000)
         else:
             filter = None
@@ -104,24 +287,44 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 
     # ---- Fold generation ----
     print("Generating folds...")
+    CLASS_DEF = None
+    CONDITION_DEF = None
     if "MFPT" in dataset_name:
         CLASS_DEF = {23: "N", 25: "O", 24: "I"}
         CONDITION_DEF = {"0":"C1","25":"C2","50":"C3","100":"C4","150":"C5","200":"C6","250":"C7","300":"C8"}
         
         GroupClass = GroupMultiRoundMFPT
-    else:
+    elif "CWRU" in dataset_name:
         CLASS_DEF = {0: "N", 1: "O", 2: "I", 3: "R"}
         CONDITION_DEF = {"0": "0", "1": "1", "2": "2", "3": "3"}
         GroupClass = GroupMultiRoundCWRULoad
+    elif "IMS" in dataset:
+        #resample
+        deep_dataset = ResamplerIMS().resample(deep_dataset)
+        print("Dataset resampled and has length:", len(deep_dataset))
+        GroupClass = GroupIMS
+    elif "UOC" in dataset:
+        GroupClass = Gou
+    else:
+        CLASS_DEF = {26: "N", 27: "O", 28: "I", 29: "R"}
+        CONDITION_DEF = {"1000_15.0_0.7": "0", "1000_25.0_0.1": "1", "1000_25.0_0.7": "2", "400_25.0_0.7": "3"}
+        GroupClass = GroupMultiRoundPU
 
-    folds_multiround = FoldIdxGeneratorUnbiased(
-        deep_dataset,
-        GroupClass,
-        dataset_name=dataset_name + "_" + transform_name,
-        multiround=True,
-        class_def=CLASS_DEF,
-        condition_def=CONDITION_DEF
-    ).generate_folds()
+    if CLASS_DEF and CONDITION_DEF:
+        folds = FoldIdxGeneratorUnbiased(
+            deep_dataset,
+            GroupClass,
+            dataset_name=dataset_name + "_" + transform_name,
+            multiround=True,
+            class_def=CLASS_DEF,
+            condition_def=CONDITION_DEF
+        ).generate_folds()
+    else:
+        folds = FoldIdxGeneratorUnbiased(
+            deep_dataset,
+            GroupClass,
+            dataset_name=dataset_name + "_" + transform_name,
+        ).generate_folds()
     print("Folds generated.")
 
     # ---- Classifier setup ----
@@ -146,9 +349,9 @@ def main(classifier_name, dataset_name, transform_name, transforms):
     experiment = Features1DExperiment(
         name=f"Vibration_Analysis_{classifier_name.upper()}_{dataset_name}_{transform_name}",
         description="Feature extraction and classification on vibration datasets",
-        feature_names=features_funcs,
+        feature_names=features_name,
         dataset=deep_dataset,
-        data_fold_idxs=folds_multiround,
+        data_fold_idxs=folds,
         n_inner_folds=4,
         model=model,
         model_parameters_search_space=model_parameters_search_space
@@ -162,8 +365,8 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 # ======================================
 if __name__ == "__main__":
     valid_classifiers = ["svm", "rf"]
-    valid_datasets = ["MFPT", "CWRU12k", "CWRU48k"]
-    valid_transforms = ["time", "frequency", "time_and_frequency"]
+    valid_datasets = ["MFPT", "CWRU_12K", "CWRU_48K","PU","IMS","UOC"]
+    valid_transforms = ["time", "frequency", "time_and_frequency","wavelet","psd"]
 
     if len(sys.argv) < 4:
         raise ValueError("Usage: python script.py <classifier> <dataset> <transform>")
@@ -184,8 +387,16 @@ if __name__ == "__main__":
     # ---- Select transform ----
     if transform_name == "time":
         transforms = transforms_time
+        features_name = features_funcs_time
     elif transform_name == "frequency":
         transforms = transforms_frequency
+        features_name = features_funcs_freq
+    elif transform_name == "wavelet":
+        transforms = transform_wavelet
+        features_name = features_funcs_wavelet +  [wavelet_features.LevelCorrelationCoefficients(),wavelet_features.RelativeEnergyRatio()]
+    elif transform_name == "psd":
+        transforms = transforms_psd
+        features_name = features_funcs_psd
     else:
         transforms = transforms_time_frequency
 

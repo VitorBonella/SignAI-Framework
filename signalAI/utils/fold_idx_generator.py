@@ -26,9 +26,29 @@ class FoldIdxGeneratorUnbiased:
 
     def generate_folds(self):
         if self.multiround:
-            return self.generate_folds_unbiased_multiround()
+            folds =  self.generate_folds_unbiased_multiround()
         else:
-            return self.generate_folds_unbiased_singleround()
+            folds =  self.generate_folds_unbiased_singleround()
+
+        #verify if all folds are presente; E.g with 3 folds division need to have 0,1,2 on the list or on the list of list
+        # Flatten folds if necessary (handle list of lists)
+        if isinstance(folds[0], (list, tuple)):
+            flat_folds = [f for sublist in folds for f in sublist]
+        else:
+            flat_folds = folds
+
+        max_fold = max(flat_folds)
+        expected_folds = set(range(max_fold + 1))
+        found_folds = set(flat_folds)
+
+        missing_folds = expected_folds - found_folds
+        if missing_folds:
+            raise ValueError(f"Missing folds: {missing_folds} (expected {expected_folds}, got {found_folds})")
+
+        if 0 not in found_folds:
+            raise ValueError("Fold 0 must be present but was not found.")
+
+        return folds
 
     def generate_folds_unbiased_singleround(self):    
         folds = self.custom_group_dataset(self.dataset, custom_name="CustomGroup"+self.dataset_name).groups()

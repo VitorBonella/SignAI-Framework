@@ -7,8 +7,8 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='signalAI',
-    version='0.0.6',
+    name='signalai',
+    version='0.0.8',
     description='A package for vibration signal analysis using AI',
     long_description=long_description,
     long_description_content_type='text/markdown',
