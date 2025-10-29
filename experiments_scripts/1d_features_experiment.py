@@ -1,4 +1,5 @@
 import sys
+import librosa
 import numpy as np
 import pywt
 from sklearn.ensemble import RandomForestClassifier
@@ -16,6 +17,10 @@ from vibdata.deep.signal.core import SignalSample
 from signalAI.utils.group_dataset import GroupDataset
 from signalAI.utils.fold_idx_generator import FoldIdxGeneratorUnbiased
 from signalAI.experiments.features_1d import Features1DExperiment
+
+from tftb.processing import smoothed_pseudo_wigner_ville
+from scipy.signal import freqz
+from scipy.signal.windows import hamming
 
 import freq_features
 import wavelet_features
@@ -64,7 +69,6 @@ transforms_time_frequency = Sequential([
         Sequential([FFT(), FeatureExtractor(features=features_funcs_freq)])  # Frequency domain features
     ])
 ])
-
 
 class WaveletCoeffsFeatures(Transform):
     def __init__(self, wavelet='db4', level=4, features = [Mean()]) -> None:
@@ -144,7 +148,8 @@ class PowerSpectralDensity(Transform):
 
 features_funcs_psd = [
     Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
-    CrestFactor(), Skewness(), Variance(), PeakValue()
+    CrestFactor(), Skewness(), Variance(), PeakValue(), freq_features.DominantFrequency(),
+    freq_features.SpectralCentroid(), freq_features.SpectralBandwidth()
 ]
 
 transforms_psd = Sequential([
@@ -152,6 +157,179 @@ transforms_psd = Sequential([
     PowerSpectralDensity(),
     FeatureExtractor(features=features_funcs_psd),
 ])
+
+
+from PyEMD import EMD
+
+class EMDCoeffsFeatures(Transform):
+    """
+    Decomposes a signal using Empirical Mode Decomposition (EMD)
+    and extracts features from each Intrinsic Mode Function (IMF),
+    as well as global multi-level EMD-based features.
+    """
+
+    def __init__(self, max_imf=None, features=[Mean()]) -> None:
+        """
+        Args:
+            max_imf (int, optional): Maximum number of IMFs to extract. Default = None (auto).
+            features (list): List of feature extractor instances (e.g., [Mean(), RMS(), Kurtosis()]).
+        """
+        super().__init__()
+        self.max_imf = max_imf
+        self.features = features
+
+    def transform(self, data):
+        data = data.copy()
+        metainfo = data["metainfo"].copy(deep=False)
+        signals = data["signal"]
+
+        ret = []
+        for (_, entry), sig in zip(metainfo.iterrows(), signals):
+            # --- EMD decomposition ---
+            emd = EMD()
+            imfs = emd(sig, max_imf=self.max_imf)
+            
+            new_data = []
+            # --- Extract per-IMF features ---
+            for imf in imfs:
+                m_data = {'signal': imf}
+                [new_data.append(f(m_data)) for f in self.features]
+
+            # --- Extract multi-level/global EMD features ---
+            ret.append(new_data)
+
+        data["signal"] = ret
+        return data
+
+features_funcs_emd = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
+    PeakValue(), CrestFactor(), Skewness(), ClearanceFactor(), ImpulseFactor(),
+    ShapeFactor(), Variance(), PeakToPeak(), wavelet_features.Energy(),
+    wavelet_features.Entropy()
+]
+
+transform_emd = Sequential([
+    SplitSampleRate(),
+    EMDCoeffsFeatures(features=features_funcs_emd, max_imf=5)
+])
+
+class SpectralEnvelope(Transform):
+    def __init__(self, n_lpc=16) -> None:
+        """
+        Args:
+            n_lpc (int): Number of LPC coefficients for envelope estimation.
+        """
+        super().__init__()
+        self.n_lpc = n_lpc
+
+    def transform(self, data):
+        data = data.copy()
+        metainfo = data["metainfo"].copy(deep=False)
+        signals = data["signal"]
+
+        ret = []
+        for (_, entry), sig in zip(metainfo.iterrows(), signals):
+            sr = entry["sample_rate"] if "sample_rate" in entry else data["metainfo"]["sample_rate"]
+
+            # --- Compute magnitude spectrum ---
+            spectrum = np.abs(np.fft.rfft(sig))
+
+            # --- Estimate LPC coefficients and envelope ---
+            lpc = librosa.lpc(sig, order=self.n_lpc)
+            w, h = freqz(1, a=lpc, worN=len(spectrum), fs=sr)
+            envelope = np.abs(h)
+
+            ret.append(envelope)
+
+        data["signal"] = ret
+        return data
+
+
+features_funcs_spectral = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
+    PeakValue(), CrestFactor(), Skewness(), ClearanceFactor(), ImpulseFactor(),
+    ShapeFactor(), Variance(), PeakToPeak(), freq_features.SpectralCentroid(),
+    freq_features.SpectralBandwidth()
+]
+
+
+transform_spectral_envelope = Sequential([
+    SplitSampleRate(),
+    SpectralEnvelope(n_lpc=16),
+    FeatureExtractor(features=features_funcs_spectral)
+])
+
+
+class WignerVilleFeatures(Transform):
+    """
+    Extracts statistical and spectral features from the Wigner-Ville distribution (WVD) of the signal.
+    """
+
+    def __init__(self, features=[Mean()], time_avg=True) -> None:
+        """
+        Args:
+            features (list): List of feature extractor instances applied to the WVD energy distribution.
+            time_avg (bool): If True, averages WVD over time to get frequency-energy distribution.
+        """
+        super().__init__()
+        self.features = features
+        self.time_avg = time_avg
+
+    def transform(self, data):
+        data = data.copy()
+        metainfo = data["metainfo"].copy(deep=False)
+        signals = data["signal"]
+
+        ret = []
+        for (_, entry), sig in zip(metainfo.iterrows(), signals):
+            sr = entry["sample_rate"] if "sample_rate" in entry else data["metainfo"]["sample_rate"]
+
+            # --- Compute Wigner–Ville distribution ---
+            wvd = smoothed_pseudo_wigner_ville(sig, freq_bins=256) 
+  
+            # --- Average over time or flatten ---
+            if self.time_avg:
+                energy = np.mean(np.abs(wvd), axis=1)  # Frequency-energy profile
+            else:
+                energy = wvd.flatten()  # Full joint distribution flattened
+
+            new_data = []
+            # --- Statistical features on WVD energy distribution ---
+            m_data = {'signal': energy}
+            [new_data.append(f(m_data)) for f in self.features]
+
+
+            ret.append(new_data)
+
+        data["signal"] = ret
+        return data
+
+features_funcs_wigner = [
+    Kurtosis(), RootMeanSquare(), StandardDeviation(), Mean(),
+    PeakValue(), CrestFactor(), Skewness(), ClearanceFactor(), ImpulseFactor(),
+    ShapeFactor(), Variance(), PeakToPeak(), wavelet_features.Energy(),
+    wavelet_features.Entropy()
+]
+ 
+transform_wigner_ville = Sequential([
+    SplitSampleRate(),
+    WignerVilleFeatures(features=features_funcs_wigner, time_avg=False)
+])
+
+
+transform_all_features = Sequential([
+    SplitSampleRate(),
+    Aggregator([
+        FeatureExtractor(features=features_funcs_time),  # Time domain features
+        Sequential([FFT(), FeatureExtractor(features=features_funcs_freq)]),  # Frequency domain features
+        WaveletCoeffsFeatures(features = features_funcs_wavelet),  # Wavelet features
+        EMDCoeffsFeatures(features=features_funcs_emd, max_imf=5),  # EMD features
+        Sequential([PowerSpectralDensity(), FeatureExtractor(features=features_funcs_psd)]),  # PSD features
+        Sequential([SpectralEnvelope(n_lpc=16), FeatureExtractor(features=features_funcs_spectral)]),  # Spectral Envelope features
+        WignerVilleFeatures(features=features_funcs_wigner, time_avg=False)  # Wigner-Ville features
+    ])
+])
+
 # ======================================
 # Dataset grouping strategies
 # ======================================
@@ -204,7 +382,7 @@ class GroupIMS(GroupDataset):
 
         group = (current_amount // samples_per_fold) + 1
         self.defects_bins[label]["current_amount"] += 1
-        return group
+        return group-1
 
     def _assigne_group(self, sample: SignalSample) -> int:
         bearing = sample["metainfo"]["bearing"]
@@ -240,14 +418,13 @@ class GroupUOC(GroupDataset):
     def _assigne_group(self, sample: SignalSample) -> int:
         severity = sample["metainfo"]["severity"]
         if severity != "-":
-            return int(severity)
+            return int(severity)-1
         else:
             label = sample["metainfo"]["label"]
             group = min(self.labels_bins[label], key=self.labels_bins[label].get)
             self.labels_bins[label][group] += 1
-            return group
-
-# ====================================== 
+            return group-1
+# ======================================
 # Main experiment runner
 # ======================================
 def main(classifier_name, dataset_name, transform_name, transforms):
@@ -282,7 +459,7 @@ def main(classifier_name, dataset_name, transform_name, transforms):
     # ---- Convert dataset ----
     print("Converting dataset...")
     deep_dataset = convertDataset(raw_dataset, filter=filter, transforms=transforms,
-                                  dir_path=deep_root_dir, batch_size=32)
+                                  dir_path=deep_root_dir, batch_size=16)
     print("Dataset converted and has length:", len(deep_dataset))
 
     # ---- Fold generation ----
@@ -304,7 +481,7 @@ def main(classifier_name, dataset_name, transform_name, transforms):
         print("Dataset resampled and has length:", len(deep_dataset))
         GroupClass = GroupIMS
     elif "UOC" in dataset:
-        GroupClass = Gou
+        GroupClass = GroupUOC
     else:
         CLASS_DEF = {26: "N", 27: "O", 28: "I", 29: "R"}
         CONDITION_DEF = {"1000_15.0_0.7": "0", "1000_25.0_0.1": "1", "1000_25.0_0.7": "2", "400_25.0_0.7": "3"}
@@ -344,7 +521,7 @@ def main(classifier_name, dataset_name, transform_name, transforms):
             "model__max_depth": [10, 25, 50],
             "model__min_samples_split": [2, 5, 10]
         }
-
+    
     # ---- Experiment ----
     experiment = Features1DExperiment(
         name=f"Vibration_Analysis_{classifier_name.upper()}_{dataset_name}_{transform_name}",
@@ -366,7 +543,7 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 if __name__ == "__main__":
     valid_classifiers = ["svm", "rf"]
     valid_datasets = ["MFPT", "CWRU_12K", "CWRU_48K","PU","IMS","UOC"]
-    valid_transforms = ["time", "frequency", "time_and_frequency","wavelet","psd"]
+    valid_transforms = ["time", "frequency", "time_and_frequency","wavelet","psd","emd","spectral_envelope","wigner_ville","all"]
 
     if len(sys.argv) < 4:
         raise ValueError("Usage: python script.py <classifier> <dataset> <transform>")
@@ -397,6 +574,26 @@ if __name__ == "__main__":
     elif transform_name == "psd":
         transforms = transforms_psd
         features_name = features_funcs_psd
+    elif transform_name == "emd":
+        transforms = transform_emd
+        features_name = features_funcs_emd
+    elif transform_name == "spectral_envelope":
+        transforms = transform_spectral_envelope
+        features_name = features_funcs_spectral
+    elif transform_name == "wigner_ville":
+        transforms = transform_wigner_ville
+        features_name = features_funcs_wigner
+    elif transform_name == "all":
+        transforms = transform_all_features
+        features_name = (
+            features_funcs_time +
+            features_funcs_freq +
+            features_funcs_wavelet + [wavelet_features.LevelCorrelationCoefficients(),wavelet_features.RelativeEnergyRatio()] +
+            features_funcs_emd +
+            features_funcs_psd +
+            features_funcs_spectral +
+            features_funcs_wigner
+        )
     else:
         transforms = transforms_time_frequency
 

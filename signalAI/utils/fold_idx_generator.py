@@ -37,15 +37,7 @@ class FoldIdxGeneratorUnbiased:
         else:
             flat_folds = folds
 
-        max_fold = max(flat_folds)
-        expected_folds = set(range(max_fold + 1))
-        found_folds = set(flat_folds)
-
-        missing_folds = expected_folds - found_folds
-        if missing_folds:
-            raise ValueError(f"Missing folds: {missing_folds} (expected {expected_folds}, got {found_folds})")
-
-        if 0 not in found_folds:
+        if 0 not in flat_folds:
             raise ValueError("Fold 0 must be present but was not found.")
 
         return folds

@@ -48,8 +48,6 @@ class DominantFrequency(Transform):
         spectrum = np.abs(data["signal"])
         fs = data["metainfo"]["sample_rate"]
         freqs = np.linspace(0, fs / 2, len(spectrum))
-        print(freqs)
-        print(np.argmax(spectrum))
         dominant_freq = freqs[np.argmax(spectrum)]
         return dominant_freq
 
