@@ -1,0 +1,708 @@
+{
+    "experiment_name": "Vibration_Analysis_RF_MFPT_time_and_frequency",
+    "description": "Feature extraction and classification on vibration datasets",
+    "model_name": "RandomForestClassifier",
+    "feature_names": [
+        "Kurtosis",
+        "RootMeanSquare",
+        "StandardDeviation",
+        "Mean",
+        "LogAttackTime",
+        "TemporalDecrease",
+        "TemporalCentroid",
+        "EffectiveDuration",
+        "ZeroCrossingRate",
+        "PeakValue",
+        "CrestFactor",
+        "Skewness",
+        "ClearanceFactor",
+        "ImpulseFactor",
+        "ShapeFactor",
+        "UpperBoundValueHistogram",
+        "LowerBoundValueHistogram",
+        "Variance",
+        "PeakToPeak",
+        "Kurtosis",
+        "RootMeanSquare",
+        "StandardDeviation",
+        "Mean",
+        "CrestFactor",
+        "Skewness",
+        "Variance",
+        "PeakValue",
+        "SpectralRolloff",
+        "SpectralFlatness",
+        "SpectralEntropy",
+        "SpectralCentroid",
+        "SpectralBandwidth",
+        "DominantFrequency"
+    ],
+    "folds": [
+        {
+            "fold_index": 0,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.72,
+                    0.28
+                ],
+                [
+                    0.72,
+                    0.28
+                ],
+                [
+                    0.86,
+                    0.14
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 1,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.02,
+                    0.98
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 2,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 3,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.92,
+                    0.08
+                ],
+                [
+                    0.94,
+                    0.06
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 4,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.02,
+                    0.98
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 5,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.02,
+                    0.98
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.0,
+                    1.0
+                ],
+                [
+                    0.98,
+                    0.02
+                ],
+                [
+                    1.0,
+                    0.0
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 1.0,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "classification_report": {
+                    "24": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 1.0,
+                    "macro avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1-score": 1.0,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    0,
+                    3
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        },
+        {
+            "fold_index": 6,
+            "y_true": [
+                25,
+                25,
+                25,
+                24,
+                24,
+                24
+            ],
+            "y_pred": [
+                24,
+                24,
+                24,
+                24,
+                24,
+                24
+            ],
+            "y_proba": [
+                [
+                    0.76,
+                    0.24
+                ],
+                [
+                    0.84,
+                    0.16
+                ],
+                [
+                    0.8,
+                    0.2
+                ],
+                [
+                    0.96,
+                    0.04
+                ],
+                [
+                    0.98,
+                    0.02
+                ],
+                [
+                    1.0,
+                    0.0
+                ]
+            ],
+            "metrics": {
+                "accuracy": 0.5,
+                "precision": 0.25,
+                "recall": 0.5,
+                "f1": 0.3333333333333333,
+                "classification_report": {
+                    "24": {
+                        "precision": 0.5,
+                        "recall": 1.0,
+                        "f1-score": 0.6666666666666666,
+                        "support": 3.0
+                    },
+                    "25": {
+                        "precision": 0.0,
+                        "recall": 0.0,
+                        "f1-score": 0.0,
+                        "support": 3.0
+                    },
+                    "accuracy": 0.5,
+                    "macro avg": {
+                        "precision": 0.25,
+                        "recall": 0.5,
+                        "f1-score": 0.3333333333333333,
+                        "support": 6.0
+                    },
+                    "weighted avg": {
+                        "precision": 0.25,
+                        "recall": 0.5,
+                        "f1-score": 0.3333333333333333,
+                        "support": 6.0
+                    }
+                },
+                "roc_auc": null,
+                "roc_auc_error": "y should be a 1d array, got an array of shape (6, 2) instead."
+            },
+            "confusion_matrix": [
+                [
+                    3,
+                    0
+                ],
+                [
+                    3,
+                    0
+                ]
+            ],
+            "selected_features": null,
+            "feature_importances": null
+        }
+    ],
+    "overall_metrics": {
+        "accuracy": 0.9285714285714286,
+        "std_accuracy": 0.1749635530559413,
+        "mean_f1": 0.9047619047619048,
+        "std_f1": 0.23328473740792172,
+        "confusion_matrix": [
+            [
+                21,
+                0
+            ],
+            [
+                3,
+                18
+            ]
+        ]
+    },
+    "config": {
+        "n_outer_folds": 7,
+        "n_inner_folds": 4,
+        "random_state": 42,
+        "data_transform": null
+    }
+}
