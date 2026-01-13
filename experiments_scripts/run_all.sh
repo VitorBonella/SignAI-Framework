@@ -5,7 +5,7 @@
 # Define lists
 classifiers=("svm" "rf")
 datasets=("MFPT" "CWRU_12K" "CWRU_48K" "PU" "IMS" "UOC")
-transforms=("time" "frequency" "time_and_frequency" "wavelet" "psd" "emd" "spectral_envelope" "wigner_ville" "all")
+transforms=("time" "frequency" "time_and_frequency" "wavelet" "psd" "spectral_envelope" "all")
 
 # Create output folder
 mkdir -p results

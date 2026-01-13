@@ -323,10 +323,8 @@ transform_all_features = Sequential([
         FeatureExtractor(features=features_funcs_time),  # Time domain features
         Sequential([FFT(), FeatureExtractor(features=features_funcs_freq)]),  # Frequency domain features
         WaveletCoeffsFeatures(features = features_funcs_wavelet),  # Wavelet features
-        EMDCoeffsFeatures(features=features_funcs_emd, max_imf=5),  # EMD features
         Sequential([PowerSpectralDensity(), FeatureExtractor(features=features_funcs_psd)]),  # PSD features
         Sequential([SpectralEnvelope(n_lpc=16), FeatureExtractor(features=features_funcs_spectral)]),  # Spectral Envelope features
-        WignerVilleFeatures(features=features_funcs_wigner, time_avg=False)  # Wigner-Ville features
     ])
 ])
 
@@ -461,6 +459,7 @@ def main(classifier_name, dataset_name, transform_name, transforms):
     deep_dataset = convertDataset(raw_dataset, filter=filter, transforms=transforms,
                                   dir_path=deep_root_dir, batch_size=16)
     print("Dataset converted and has length:", len(deep_dataset))
+    print("Number of features extracted:", len(deep_dataset[0]["signal"][0]))
 
     # ---- Fold generation ----
     print("Generating folds...")
@@ -523,10 +522,12 @@ def main(classifier_name, dataset_name, transform_name, transforms):
         }
     
     # ---- Experiment ----
+    
     experiment = Features1DExperiment(
-        name=f"Vibration_Analysis_{classifier_name.upper()}_{dataset_name}_{transform_name}",
+        name=f"Vibration_Analysis_{classifier_name.upper()}_{dataset_name}_{transform_name}_{type(FEATURE_SELECTOR).__name__ if FEATURE_SELECTOR else ''}",
         description="Feature extraction and classification on vibration datasets",
         feature_names=features_name,
+        feature_selector=FEATURE_SELECTOR,
         dataset=deep_dataset,
         data_fold_idxs=folds,
         n_inner_folds=4,
@@ -538,12 +539,30 @@ def main(classifier_name, dataset_name, transform_name, transforms):
 
 
 # ======================================
+# Feature selectors
+# ======================================
+
+FEATURE_SELECTOR = None
+N_FEATURES_TO_SELECT = 42
+
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.feature_selection import SelectKBest, f_classif
+knn = KNeighborsClassifier(n_neighbors=3)
+sfs = SequentialFeatureSelector(knn, n_features_to_select=N_FEATURES_TO_SELECT)
+anova = SelectKBest(f_classif, k=N_FEATURES_TO_SELECT)
+
+from hybrid_selector import HybridRankingWrapperSelector
+hybrid = HybridRankingWrapperSelector(base_estimator=knn, max_features_value=N_FEATURES_TO_SELECT, max_features_ratio=0.2,alpha=0.99, cv=5, scoring='f1_macro',verbose=False)
+
+# ======================================
 # Script entrypoint
 # ======================================
 if __name__ == "__main__":
     valid_classifiers = ["svm", "rf"]
     valid_datasets = ["MFPT", "CWRU_12K", "CWRU_48K","PU","IMS","UOC"]
-    valid_transforms = ["time", "frequency", "time_and_frequency","wavelet","psd","emd","spectral_envelope","wigner_ville","all"]
+    valid_transforms = ["time", "frequency", "time_and_frequency","wavelet","psd","emd","spectral_envelope","all"]
+    valid_feature_selector = ["sfs","anova","hybrid"]
 
     if len(sys.argv) < 4:
         raise ValueError("Usage: python script.py <classifier> <dataset> <transform>")
@@ -561,6 +580,18 @@ if __name__ == "__main__":
     if transform_name not in valid_transforms:
         raise ValueError(f"Transform {transform_name} not recognized. Valid options: {valid_transforms}")
 
+    if len(sys.argv) >= 5:
+        feature_selector_name = sys.argv[4]
+        if feature_selector_name not in valid_feature_selector:
+            raise ValueError(f"Feature selector {feature_selector_name} not recognized. Valid options: {valid_feature_selector}")
+        else:
+            if feature_selector_name == "sfs":
+                FEATURE_SELECTOR = sfs
+            elif feature_selector_name == "anova":
+                FEATURE_SELECTOR = anova
+            elif feature_selector_name == "hybrid":
+                FEATURE_SELECTOR = hybrid
+
     # ---- Select transform ----
     if transform_name == "time":
         transforms = transforms_time
@@ -570,7 +601,11 @@ if __name__ == "__main__":
         features_name = features_funcs_freq
     elif transform_name == "wavelet":
         transforms = transform_wavelet
-        features_name = features_funcs_wavelet +  [wavelet_features.LevelCorrelationCoefficients(),wavelet_features.RelativeEnergyRatio()]
+        features_funcs_wavelet_name = []
+        for f in features_funcs_wavelet:
+            for level in range(1,6):
+                features_funcs_wavelet_name.append(f"{type(f).__name__}_L{level}")
+        features_name = features_funcs_wavelet_name +  ["LevelCorrelationCoefficients","RelativeEnergyRatio"]
     elif transform_name == "psd":
         transforms = transforms_psd
         features_name = features_funcs_psd
@@ -580,21 +615,31 @@ if __name__ == "__main__":
     elif transform_name == "spectral_envelope":
         transforms = transform_spectral_envelope
         features_name = features_funcs_spectral
-    elif transform_name == "wigner_ville":
-        transforms = transform_wigner_ville
-        features_name = features_funcs_wigner
     elif transform_name == "all":
         transforms = transform_all_features
+
+        # features naming origin turning mean to mean_time, mean_freq, etc.
+        features_funcs_time_name = [type(f).__name__ + "_time" for f in features_funcs_time]
+        features_funcs_freq_name = [type(f).__name__ + "_freq" for f in features_funcs_freq]
+        # wavelet have 4 levels + 2 multilevel features
+        features_funcs_wavelet_name = []
+        for f in features_funcs_wavelet:
+            for level in range(1,6):
+                features_funcs_wavelet_name.append(f"{type(f).__name__}_wavelet_L{level}")
+            
+        features_funcs_wavelet_name = features_funcs_wavelet_name + ["LevelCorrelationCoefficients_wavelet","RelativeEnergyRatio_wavelet"]
+        features_funcs_psd_name = [type(f).__name__ + "_psd" for f in features_funcs_psd]
+        features_funcs_spectral_name = [type(f).__name__ + "_spectral" for f in features_funcs_spectral]
+
         features_name = (
-            features_funcs_time +
-            features_funcs_freq +
-            features_funcs_wavelet + [wavelet_features.LevelCorrelationCoefficients(),wavelet_features.RelativeEnergyRatio()] +
-            features_funcs_emd +
-            features_funcs_psd +
-            features_funcs_spectral +
-            features_funcs_wigner
+            features_funcs_time_name +
+            features_funcs_freq_name +
+            features_funcs_wavelet_name +
+            features_funcs_psd_name +
+            features_funcs_spectral_name
         )
     else:
         transforms = transforms_time_frequency
-
+        features_name = features_funcs_time + features_funcs_freq
+    
     main(classifier, dataset, transform_name, transforms)

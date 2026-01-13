@@ -162,6 +162,7 @@ class Features1DExperiment(Experiment):
     
     def run_single_round(self, multi_round_i = None) -> ExperimentResults:
         """Executa o experimento e retorna objeto ExperimentResults."""
+        start_time_total = time.time()
         if self.model is None:
             raise ValueError("Modelo não foi definido para o experimento")
         
@@ -245,10 +246,16 @@ class Features1DExperiment(Experiment):
         # Calcular métricas agregadas
         results.calculate_overall_metrics()
         
+        total_time = time.time() - start_time_total
+        print(f"\nTempo total do experimento: {total_time:.2f} segundos")
+
+        # adicionar ao objeto results
+        results.overall_metrics["total_runtime_seconds"] = total_time
+
         print("\n=== Resultados Finais ===")
         print(f"Acurácia Média: {results.overall_metrics['accuracy']:.4f} ± {results.overall_metrics['std_accuracy']:.4f}")
         print(f"F1-Score Médio: {results.overall_metrics['mean_f1']:.4f} ± {results.overall_metrics['std_f1']:.4f}")
-        
+
         if multi_round_i is None:
             results.save_json(f"{self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
             print(f"Saved results to: {self.output_dir}/vibration_analysis_results_{results.experiment_name}_{self.start_time}.json")
