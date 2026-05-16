@@ -1,14 +1,0 @@
-[   INFO   ] MusicExtractorSVM: no classifier models were configured by default
-
-=== Running experiment ===
-Dataset: MFPT
-Classifier: svm
-Transform: time
-==========================
-Raw dataset loaded with length: 20
-Converting dataset...
-Transformando
-Converting MFPT:   0%|          | 0/2 [00:00<?, ?it/s]Converting MFPT:  50%|█████     | 1/2 [00:00<00:00,  1.75it/s]Converting MFPT: 100%|██████████| 2/2 [00:00<00:00,  2.90it/s]Converting MFPT: 100%|██████████| 2/2 [00:00<00:00,  2.64it/s]
-Dataset converted and has length: 42
-Generating folds...
-Grouping dataset:   0%|          | 0/42 [00:00<?, ?sample/s]Grouping dataset: 100%|██████████| 42/42 [00:00<00:00, 11730.76sample/s]

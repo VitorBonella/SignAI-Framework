@@ -210,3 +210,5 @@ __marimo__/
 data/
 experiments_scripts/results_1d_features
 experiments_scripts/results
+experiments_scripts_legacy/
+signalAI_legacy/
