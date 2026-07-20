@@ -27,6 +27,17 @@ class FoldIdxGeneratorUnbiased:
         self.condition_def = condition_def if condition_def is not None else getattr(custom_group_dataset, 'CONDITION_DEF', {})
 
     def generate_folds(self):
+        import os
+        import pickle
+        cache_dir = "./data/cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f"folds_{self.dataset_name}_multi_{self.multiround}_seed_{self.random_state}.pkl")
+
+        if os.path.exists(cache_file):
+            print(f"Loading folds from cache: {cache_file}")
+            with open(cache_file, "rb") as f:
+                return pickle.load(f)
+
         if self.multiround:
             folds = self.generate_folds_unbiased_multiround()
         else:
@@ -44,6 +55,9 @@ class FoldIdxGeneratorUnbiased:
             raise ValueError(
                 f"Missing folds. Found {unique_folds}, expected {expected_folds}"
             )
+
+        with open(cache_file, "wb") as f:
+            pickle.dump(folds, f)
 
         return folds
 

@@ -8,6 +8,7 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.feature_selection import SequentialFeatureSelector, SelectKBest, f_classif
 
+from signalai.features.selection import HybridRankingWrapperSelector, MRMRSelector
 import vibdata.raw as raw_datasets
 from vibdata.deep.DeepDataset import convertDataset
 from vibdata.deep.signal.transforms import FilterByValue
@@ -23,15 +24,24 @@ def main():
     parser.add_argument("classifier", choices=["svm", "rf"], help="Classifier to use")
     parser.add_argument("dataset", help="Dataset name (e.g., MFPT, CWRU_12K)")
     parser.add_argument("transform", help="Feature transform name (e.g., time, frequency)")
-    parser.add_argument("--selector", choices=["sfs", "anova"], help="Feature selector")
+    parser.add_argument("--selector", choices=["sfs", "anova", "hybrid", "mrmr"], help="Feature selector")
     parser.add_argument("--output", default="results", help="Output directory")
+    parser.add_argument("--no-timestamp", action="store_true", help="Do not create a timestamped subfolder")
     
     args = parser.parse_args()
 
     # Pre-calculate experiment name and timestamp to setup logging early
     exp_name = f"Exp_{args.classifier}_{args.dataset}_{args.transform}"
+    if args.selector:
+        exp_name += f"_{args.selector}"
+
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    run_dir = os.path.join(args.output, f"results_{exp_name}_{timestamp}")
+    
+    if args.no_timestamp:
+        run_dir = args.output
+    else:
+        run_dir = os.path.join(args.output, f"results_{exp_name}_{timestamp}")
+    
     os.makedirs(run_dir, exist_ok=True)
     
     log_file = os.path.join(run_dir, "experiment.log")
@@ -41,6 +51,8 @@ def main():
     print(f"Dataset: {args.dataset}")
     print(f"Classifier: {args.classifier}")
     print(f"Transform: {args.transform}")
+    if args.selector:
+        print(f"Selector: {args.selector}")
     print(f"Output directory: {run_dir}")
     print("==========================")
 
@@ -108,6 +120,14 @@ def main():
         selector = SequentialFeatureSelector(KNeighborsClassifier(n_neighbors=3), n_features_to_select=20)
     elif args.selector == "anova":
         selector = SelectKBest(f_classif, k=20)
+    elif args.selector == "hybrid":
+        if args.classifier == "svm":
+            hrw_model = SVC(kernel="linear", C=1.0, random_state=42)
+        else:
+            hrw_model = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)
+        selector = HybridRankingWrapperSelector(base_estimator=hrw_model, max_features_ratio=0.2)
+    elif args.selector == "mrmr":
+        selector = MRMRSelector(n_features_to_select=20, verbose=True)
 
     # --- Run Experiment ---
     experiment = ClassificationExperiment(
@@ -120,7 +140,7 @@ def main():
         model=model,
         model_parameters_search_space=search_space,
         output_dir=args.output,
-        start_time=timestamp
+        start_time=timestamp if not args.no_timestamp else ""
     )
 
     experiment.run()

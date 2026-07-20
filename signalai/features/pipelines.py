@@ -97,6 +97,15 @@ PIPELINE_SPECTRAL_ENVELOPE = Sequential([
     FeatureExtractor(features=FEATURES_SPECTRAL)
 ])
 
+PIPELINE_RAW_TIME = Sequential([
+    SplitSampleRate(),
+])
+
+PIPELINE_RAW_FREQ = Sequential([
+    SplitSampleRate(),
+    FFT(),
+])
+
 PIPELINE_ALL = Sequential([
     SplitSampleRate(),
     Aggregator([
@@ -116,7 +125,9 @@ def get_pipeline(name: str):
         "wavelet": PIPELINE_WAVELET,
         "psd": PIPELINE_PSD,
         "spectral_envelope": PIPELINE_SPECTRAL_ENVELOPE,
-        "all": PIPELINE_ALL
+        "all": PIPELINE_ALL,
+        "raw_time": PIPELINE_RAW_TIME,
+        "raw_freq": PIPELINE_RAW_FREQ
     }
     if name not in pipelines:
         raise ValueError(f"Unknown pipeline: {name}. Available: {list(pipelines.keys())}")

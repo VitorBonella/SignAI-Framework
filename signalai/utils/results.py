@@ -8,6 +8,17 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 @dataclass
 class FoldResults:
     """Stores results for a specific fold."""
@@ -21,7 +32,7 @@ class FoldResults:
     feature_importances: Optional[Dict[str, float]] = None
     
     def __post_init__(self):
-        if len(self.confusion_matrix) == 0 and len(self.y_true) > 0:
+        if len(self.confusion_matrix) == 0 and len(self.y_true) > 0 and len(np.unique(self.y_true)) > 1:
             self.confusion_matrix = confusion_matrix(self.y_true, self.y_pred)
     
     def to_dict(self) -> Dict:
@@ -53,18 +64,27 @@ class ExperimentResults:
     
     def calculate_overall_metrics(self):
         """Calculates aggregate metrics from all folds."""
-        all_y_true = np.concatenate([fold.y_true for fold in self.folds])
-        all_y_pred = np.concatenate([fold.y_pred for fold in self.folds])
-        
-        overall_cm = confusion_matrix(all_y_true, all_y_pred)
-        
-        self.overall_metrics = {
-            'accuracy': np.mean([fold.metrics['accuracy'] for fold in self.folds]),
-            'std_accuracy': np.std([fold.metrics['accuracy'] for fold in self.folds]),
-            'mean_f1': np.mean([fold.metrics['f1'] for fold in self.folds]),
-            'std_f1': np.std([fold.metrics['f1'] for fold in self.folds]),
-            'confusion_matrix': overall_cm.tolist()
-        }
+        if not self.folds:
+            return
+
+        if 'accuracy' in self.folds[0].metrics:
+            all_y_true = np.concatenate([fold.y_true for fold in self.folds])
+            all_y_pred = np.concatenate([fold.y_pred for fold in self.folds])
+            overall_cm = confusion_matrix(all_y_true, all_y_pred)
+            self.overall_metrics = {
+                'accuracy': np.mean([fold.metrics['accuracy'] for fold in self.folds]),
+                'std_accuracy': np.std([fold.metrics['accuracy'] for fold in self.folds]),
+                'mean_f1': np.mean([fold.metrics['f1'] for fold in self.folds]),
+                'std_f1': np.std([fold.metrics['f1'] for fold in self.folds]),
+                'confusion_matrix': overall_cm.tolist()
+            }
+        else:
+            # Reconstruction model — aggregate whatever scalar metrics exist (e.g. mse)
+            self.overall_metrics = {}
+            for key in self.folds[0].metrics:
+                values = [fold.metrics[key] for fold in self.folds]
+                self.overall_metrics[f'mean_{key}'] = float(np.mean(values))
+                self.overall_metrics[f'std_{key}'] = float(np.std(values))
     
     def to_dict(self) -> Dict:
         """Converts to a serializable dictionary."""
@@ -75,7 +95,7 @@ class ExperimentResults:
     def save_json(self, filepath: Union[str, Path]):
         """Saves results to a JSON file."""
         with open(filepath, 'w') as f:
-            json.dump(self.to_dict(), f, indent=4)
+            json.dump(self.to_dict(), f, indent=4, cls=NumpyEncoder)
     
     @classmethod
     def load_json(cls, filepath: Union[str, Path]) -> 'ExperimentResults':

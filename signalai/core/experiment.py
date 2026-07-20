@@ -57,8 +57,12 @@ class BaseExperiment(ABC):
         if self.start_time is None:
             self.start_time = time.strftime("%Y%m%d_%H%M%S")
         
-        dir_name = f"results_{self.name}_{self.start_time}"
-        self.run_dir = self.output_dir / dir_name
+        if self.start_time == "":
+            self.run_dir = self.output_dir
+        else:
+            dir_name = f"results_{self.name}_{self.start_time}"
+            self.run_dir = self.output_dir / dir_name
+        
         self.run_dir.mkdir(parents=True, exist_ok=True)
         
         log_file = self.run_dir / "experiment.log"
