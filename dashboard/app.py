@@ -1,9 +1,10 @@
+import io
 import streamlit as st
 import pandas as pd
 import numpy as np
 from dashboard.data import get_results_dirs, load_all_results, generate_mock_data
-from dashboard.stats import perform_statistical_analysis, generate_latex_table
-from dashboard.plots import plot_boxplots, plot_mean_std
+from dashboard.stats import perform_statistical_analysis, generate_latex_table, generate_latex_figure
+from dashboard.plots import plot_boxplots, plot_mean_std, plot_radar_chart, plot_classifier_feature_heatmap
 
 def main():
     st.set_page_config(layout="wide", page_title="SignalAI Benchmarking Dashboard")
@@ -72,7 +73,162 @@ def main():
         st.subheader("Performance Summary")
         fig_mean = plot_mean_std(df_viz, metric)
         st.pyplot(fig_mean, width='stretch')
-        
+
+    # --- SECTION: RADAR CHART (PAPER EXPORT) ---
+    st.divider()
+    st.header("📡 Radar Chart: Macro F1 vs. Balanced Accuracy")
+
+    zoom_radar = st.checkbox(
+        "Zoom radial axis to data range (recommended when methods are close)",
+        value=True
+    )
+
+    fig_radar, radar_caption = plot_radar_chart(df_viz, zoom=zoom_radar)
+    st.pyplot(fig_radar, width='stretch')
+    st.caption(radar_caption)
+
+    png_buf = io.BytesIO()
+    fig_radar.savefig(png_buf, format="png", dpi=300, bbox_inches="tight")
+    pdf_buf = io.BytesIO()
+    fig_radar.savefig(pdf_buf, format="pdf", bbox_inches="tight")
+
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        st.download_button(
+            "⬇️ Download PNG (300 DPI)",
+            data=png_buf.getvalue(),
+            file_name="radar_comparison.png",
+            mime="image/png"
+        )
+    with dl_col2:
+        st.download_button(
+            "⬇️ Download PDF (vector, for LaTeX)",
+            data=pdf_buf.getvalue(),
+            file_name="radar_comparison.pdf",
+            mime="application/pdf"
+        )
+
+    with st.expander("📄 LaTeX figure snippet"):
+        radar_latex = generate_latex_figure(
+            caption=radar_caption,
+            label="fig:radar_comparison",
+            filename="radar_comparison.pdf"
+        )
+        st.text_area("Copy LaTeX Code", radar_latex, height=180)
+
+    # --- SECTION: CLASSIFIER x FEATURE-SET HEATMAP ---
+    st.divider()
+    st.header("🧩 Classifier × Feature-Set Heatmap")
+    st.markdown(
+        "Compact alternative to one results table per classifier: mean ± std per dataset and "
+        "feature set, faceted by classifier. Uses **all datasets** (not just the one selected above)."
+    )
+
+    all_classifiers = sorted(df["Method_Name"].dropna().unique())
+    canonical_feature_order = ["time", "frequency", "psd", "wavelet", "spectral_envelope", "all"]
+    present_features = df["Feature_Group"].dropna().unique().tolist()
+    all_features = [f for f in canonical_feature_order if f in present_features]
+    all_features += sorted(f for f in present_features if f not in canonical_feature_order)
+    all_datasets = sorted(df["Dataset"].dropna().unique())
+
+    hm_sel_col1, hm_sel_col2 = st.columns(2)
+    with hm_sel_col1:
+        heatmap_classifiers = st.multiselect(
+            "Classifiers to include", all_classifiers, default=all_classifiers
+        )
+    with hm_sel_col2:
+        heatmap_features = st.multiselect(
+            "Feature sets to include", all_features, default=all_features
+        )
+
+    with st.expander("✏️ Customize labels"):
+        heatmap_title = st.text_input(
+            "Figure title", value="", placeholder="(auto-generated if left blank)"
+        )
+
+        st.markdown("**Classifiers**")
+        classifier_label_map = {}
+        clf_cols = st.columns(min(len(heatmap_classifiers), 4)) if heatmap_classifiers else []
+        for i, m in enumerate(heatmap_classifiers):
+            with clf_cols[i % len(clf_cols)]:
+                classifier_label_map[m] = st.text_input(m, value=m, key=f"clf_label_{m}")
+
+        st.markdown("**Datasets**")
+        dataset_label_map = {}
+        ds_cols = st.columns(min(len(all_datasets), 4)) if all_datasets else []
+        for i, d in enumerate(all_datasets):
+            with ds_cols[i % len(ds_cols)]:
+                dataset_label_map[d] = st.text_input(d, value=d.replace("_", " "), key=f"ds_label_{d}")
+
+        st.markdown("**Feature sets**")
+        feature_label_map = {}
+        ft_cols = st.columns(min(len(heatmap_features), 4)) if heatmap_features else []
+        for i, f in enumerate(heatmap_features):
+            with ft_cols[i % len(ft_cols)]:
+                feature_label_map[f] = st.text_input(
+                    f, value=f.replace("_", " ").title(), key=f"ft_label_{f}"
+                )
+
+    if not heatmap_classifiers:
+        st.warning("Select at least one classifier for the heatmap.")
+    elif not heatmap_features:
+        st.warning("Select at least one feature set for the heatmap.")
+    else:
+        fig_heatmap, heatmap_caption = plot_classifier_feature_heatmap(
+            df, metric, heatmap_classifiers, heatmap_features,
+            title=heatmap_title or None,
+            classifier_labels=classifier_label_map,
+            dataset_labels=dataset_label_map,
+            feature_set_labels=feature_label_map,
+        )
+        st.pyplot(fig_heatmap, width='stretch')
+        st.caption(heatmap_caption)
+
+        png_dpi = st.select_slider(
+            "PNG resolution (DPI)", options=[150, 300, 600, 900, 1200], value=1200,
+            help="Vector formats (PDF/SVG) are already lossless at any zoom; this only affects the PNG."
+        )
+        heatmap_png_buf = io.BytesIO()
+        fig_heatmap.savefig(heatmap_png_buf, format="png", dpi=png_dpi, bbox_inches="tight")
+        heatmap_pdf_buf = io.BytesIO()
+        fig_heatmap.savefig(heatmap_pdf_buf, format="pdf", bbox_inches="tight")
+        heatmap_svg_buf = io.BytesIO()
+        fig_heatmap.savefig(heatmap_svg_buf, format="svg", bbox_inches="tight")
+
+        hm_col1, hm_col2, hm_col3 = st.columns(3)
+        with hm_col1:
+            st.download_button(
+                f"⬇️ Download PNG ({png_dpi} DPI)",
+                data=heatmap_png_buf.getvalue(),
+                file_name="classifier_feature_heatmap.png",
+                mime="image/png",
+                key="heatmap_png"
+            )
+        with hm_col2:
+            st.download_button(
+                "⬇️ Download PDF (vector, for LaTeX)",
+                data=heatmap_pdf_buf.getvalue(),
+                file_name="classifier_feature_heatmap.pdf",
+                mime="application/pdf",
+                key="heatmap_pdf"
+            )
+        with hm_col3:
+            st.download_button(
+                "⬇️ Download SVG (vector, editable)",
+                data=heatmap_svg_buf.getvalue(),
+                file_name="classifier_feature_heatmap.svg",
+                mime="image/svg+xml",
+                key="heatmap_svg"
+            )
+
+        with st.expander("📄 LaTeX figure snippet"):
+            heatmap_latex = generate_latex_figure(
+                caption=heatmap_caption,
+                label="fig:classifier_feature_heatmap",
+                filename="classifier_feature_heatmap.pdf"
+            )
+            st.text_area("Copy LaTeX Code", heatmap_latex, height=180, key="heatmap_latex")
+
     # --- SECTION: STATISTICAL ANALYSIS ---
     st.divider()
     st.header("⚖️ Statistical Comparison")

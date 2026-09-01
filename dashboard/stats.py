@@ -116,3 +116,14 @@ def generate_latex_table(stats_df, summary_df):
         stats_latex = "% Not enough data for statistical analysis"
         
     return summary_latex, stats_latex
+
+def generate_latex_figure(caption, label="fig:radar_comparison", filename="radar_comparison.pdf", width="0.8"):
+    """Generates a LaTeX figure snippet wrapping an exported plot image."""
+    return (
+        "\\begin{figure}[htbp]\n"
+        "    \\centering\n"
+        f"    \\includegraphics[width={width}\\linewidth]{{{filename}}}\n"
+        f"    \\caption{{{caption}}}\n"
+        f"    \\label{{{label}}}\n"
+        "\\end{figure}"
+    )
