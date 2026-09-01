@@ -36,7 +36,20 @@ class FoldIdxGeneratorUnbiased:
         if os.path.exists(cache_file):
             print(f"Loading folds from cache: {cache_file}")
             with open(cache_file, "rb") as f:
-                return pickle.load(f)
+                folds = pickle.load(f)
+            if self.multiround and isinstance(folds, list) and self.class_def:
+                groups = self.custom_group_dataset(
+                    self.dataset, custom_name="CustomGroup" + self.dataset_name
+                ).groups()
+                valid_combs = [
+                    tuple(
+                        tuple(np.unique(groups[fold_arr == fi]))
+                        for fi in range(len(np.unique(fold_arr)))
+                    )
+                    for fold_arr in folds
+                ]
+                self.print_combinations(valid_combs, categorical_groups=not bool(self.condition_def))
+            return folds
 
         if self.multiround:
             folds = self.generate_folds_unbiased_multiround()
@@ -126,7 +139,7 @@ class FoldIdxGeneratorUnbiased:
         rng.shuffle(round_combinations)
 
         #select the first valid n_repeats combinations(englobe all data)
-        
+
         def equal_folds(x1, x2):
             sample_x_folds = set(x1)
             sample_y_folds = set(x2)

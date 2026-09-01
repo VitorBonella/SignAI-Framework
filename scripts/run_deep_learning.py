@@ -59,7 +59,7 @@ def main():
     
     # --- Fold Generation ---
     GroupClass, deep_dataset = get_dataset_grouping(args.dataset, deep_dataset)
-    generator = FoldIdxGeneratorUnbiased(deep_dataset, GroupClass, dataset_name=f"{args.dataset}_{args.transform}")
+    generator = FoldIdxGeneratorUnbiased(deep_dataset, GroupClass, dataset_name=args.dataset)
     folds = generator.generate_folds()
 
     # --- Model Selection ---
