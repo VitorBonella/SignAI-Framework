@@ -21,6 +21,7 @@ setup(
         "numpy",
         "pandas",
         "scikit-learn",
+        "lightgbm",
         "seaborn",
         "matplotlib",
         "vibdata"

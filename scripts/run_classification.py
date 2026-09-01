@@ -8,6 +8,8 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.feature_selection import SequentialFeatureSelector, SelectKBest, f_classif
 
+from lightgbm import LGBMClassifier
+
 from signalai.features.selection import HybridRankingWrapperSelector, MRMRSelector
 import vibdata.raw as raw_datasets
 from vibdata.deep.DeepDataset import convertDataset
@@ -21,7 +23,7 @@ from signalai.utils.logging import setup_logger
 
 def main():
     parser = argparse.ArgumentParser(description="Run vibration classification experiment.")
-    parser.add_argument("classifier", choices=["svm", "rf"], help="Classifier to use")
+    parser.add_argument("classifier", choices=["svm", "rf", "lgbm"], help="Classifier to use")
     parser.add_argument("dataset", help="Dataset name (e.g., MFPT, CWRU_12K)")
     parser.add_argument("transform", help="Feature transform name (e.g., time, frequency)")
     parser.add_argument("--selector", choices=["sfs", "anova", "hybrid", "mrmr"], help="Feature selector")
@@ -93,7 +95,7 @@ def main():
 
     generator = FoldIdxGeneratorUnbiased(
         deep_dataset, GroupClass,
-        dataset_name=f"{args.dataset}_{args.transform}"
+        dataset_name=args.dataset
     )
     folds = generator.generate_folds()
     print("Folds generated.\n")
@@ -105,6 +107,33 @@ def main():
             "model__C": [0.1, 1, 10, 100],
             "model__kernel": ["linear", "rbf", "poly"],
             "model__gamma": ["scale", "auto"]
+        }
+    elif args.classifier == "lgbm":
+        # n_jobs=1: GridSearchCV(n_jobs=-1) already parallelizes across fits/candidates;
+        # without this, LightGBM's own internal OpenMP threading oversubscribes the CPU
+        # (N worker processes x M internal threads each, contending for the same cores).
+        # subsample_freq=1 is fixed (not searched) purely so the "model__subsample" grid
+        # value below actually takes effect: LightGBM's row-bagging is a no-op unless
+        # subsample_freq > 0.
+        # min_child_samples default (20) requires >=40 samples in a node to split at
+        # all, which is larger than some datasets' entire inner-CV training folds (e.g.
+        # MFPT: ~27 samples/fold), silently collapsing every tree to a single constant
+        # leaf. Fixed at a low value rather than grid-searched to keep the search space
+        # (and runtime) unchanged.
+        model = LGBMClassifier(random_state=42, verbose=-1, n_jobs=1, subsample_freq=1, min_child_samples=5)
+        # Dimensions follow Probst et al. (2019, JMLR "Tunability"), which studied this
+        # same leaf-wise boosted-tree family (XGBoost/gbm) and ranked learning_rate,
+        # n_estimators, tree-complexity (max_depth/num_leaves), subsample (row bagging),
+        # and colsample_bytree (feature bagging) as the highest-impact hyperparameters.
+        # num_leaves is capped at 63 and subsample/colsample_bytree add bagging-based
+        # regularization, since the per-fold sample counts here are small enough that an
+        # unconstrained leaf-wise learner overfits easily.
+        search_space = {
+            "model__learning_rate": [0.01, 0.05, 0.1],
+            "model__n_estimators": [100, 300, 500],
+            "model__num_leaves": [15, 31, 63],
+            "model__colsample_bytree": [0.7, 1.0],
+            "model__subsample": [0.7, 1.0],
         }
     else:
         model = RandomForestClassifier(random_state=42)
