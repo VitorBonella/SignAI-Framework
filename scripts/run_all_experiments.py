@@ -6,7 +6,8 @@ from pathlib import Path
 # --- Configuration ---
 DATASETS = [ "CWRU_12K", "CWRU_48K", "UOC", "PU", "IMS","MFPT"]
 TRANSFORMS = ["time", "frequency", "time_and_frequency", "wavelet", "psd", "spectral_envelope", "all"]
-CLASSIFIERS = ["svm", "rf"]
+#CLASSIFIERS = ["svm", "rf", "lgbm"]
+CLASSIFIERS = ["lgbm"]
 #SELECTORS = ["hybrid", "anova", "sfs", "mrmr"] # Only for the "all" transform
 SELECTORS = ["anova", "mrmr"] 
 
